@@ -1,0 +1,4 @@
+# Includes can include: one file per area, each path relative to this file's folder.
+expect:
+  - include: ./checks/errors.yaml
+  - include: ./checks/env.yaml

@@ -1,0 +1,21 @@
+# Reaches both services with what the export Secret holds: the workload
+# reads the connection details jig wrote, as an app would.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: probe
+  namespace: default
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          envFrom: [{ secretRef: { name: shop-deps } }]
+          command: ["sh", "-c", "psql \"$POSTGRES_URL\" -c 'select 1'"]
+        - name: redis
+          image: redis:7-alpine
+          envFrom: [{ secretRef: { name: shop-deps } }]
+          command: ["sh", "-c", "redis-cli -u \"$REDIS_URL\" ping | grep PONG"]

@@ -1,0 +1,33 @@
+# A CLI or script, no cluster: the steps and checks are commands.
+name: commands
+description: Generate a file, check what it says, and clean up, without a cluster
+
+env:
+  GREETING: hello
+  NAME: jig
+  OUT: /tmp/jig-example-commands.txt
+
+environment:
+  cluster:
+    provider: none
+
+prepare:
+  - name: generate
+    commands:
+      # ${{ env.NAME }} is expanded by jig; $NAME and ${NAME} by the shell.
+      - run: echo "${{ env.GREETING }}, $NAME" > "${OUT}"
+
+expect:
+  - name: the file says hello
+    after: generate
+    timeout: 5s
+    commands:
+      - run: cat "$OUT"
+        contains: hello, jig
+
+  # The rest, one file per area: checks.yaml includes them in turn.
+  - include: ./checks.yaml
+
+finally:
+  commands:
+    - run: rm -f "$OUT"

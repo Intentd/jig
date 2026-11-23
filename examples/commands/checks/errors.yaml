@@ -1,0 +1,6 @@
+expect:
+  - name: a missing file fails the way it should
+    timeout: 5s
+    commands:
+      - run: cat /nonexistent/jig-example
+        exitCode: 1

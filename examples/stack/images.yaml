@@ -1,0 +1,15 @@
+# The greeters: one entry, a row per language. Each row is its own image
+# (the build arg differs), its own Deployment and Service.
+images:
+  - name: "greeter-{{ .item.lang }}"
+    forEach:
+      items:
+        - { lang: en, greeting: hello }
+        - { lang: fr, greeting: bonjour }
+    image: "greeter:{{ .item.lang }}"
+    build:
+      context: .
+      args: { GREETING: "{{ .item.greeting }}" }
+    deploy:
+      ports: [8080]
+      env: { LANG_CODE: "{{ .item.lang }}" }

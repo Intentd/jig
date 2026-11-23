@@ -1,0 +1,122 @@
+# Services from their repositories, started together, the way a Compose
+# file does it, in a real cluster: one service from a remote repository,
+# two built here from one entry with forEach, deployed in needs order.
+name: stack
+description: Greeters built here with forEach, hello-web from its repository, deployed in needs order
+
+environment:
+  cluster:
+    name: jig-stack
+  images:
+    - include: ./images.yaml                    # the greeters, one row per language
+    - name: hello-web
+      git:                                      # jig's own repository: the app-image example
+        url: https://github.com/intentd/jig.git
+        branch: main
+        pull: IfNotPresent
+      build: { context: examples/app-image }
+      image: hello-web:git
+      needs: [greeter]                          # every greeter row, ready first
+      deploy:
+        ports: [8080]
+        env: { GREETER_URL: "http://greeter-en.default:8080" }
+
+expect:
+  - name: each greeter runs with its language
+    after: environment
+    timeout: 120s
+    kubectl:
+      get:
+        - kind: Deployment
+          name: greeter-fr
+          namespace: default
+          match:
+            spec:
+              template:
+                spec:
+                  containers:
+                    - image: greeter:fr
+                      env: [{ name: LANG_CODE, value: fr }]
+            status:
+              readyReplicas: '${ value >= 1 }'
+
+  - name: the French greeter says bonjour
+    after: environment
+    timeout: 60s
+    kubectl:
+      port-forward:
+        - service: greeter-fr
+          namespace: default
+          port: 8080
+          contains: bonjour from jig
+
+  - name: hello-web, from its repository, serves its page
+    after: environment
+    timeout: 120s
+    kubectl:
+      port-forward:
+        - service: hello-web
+          namespace: default
+          port: 8080
+          contains: hello from jig
+
+  - name: hello-web was deployed after the greeters were ready
+    after: environment
+    timeout: 30s
+    kubectl:
+      get:
+        - kind: Deployment
+          name: hello-web
+          namespace: default
+          json:
+            - path: .metadata.creationTimestamp
+              exists: true
+            - path: .spec.template.spec.containers[0].env[0].value
+              expr: '{{ hasPrefix .value "http://greeter-en" }}'
+
+  - name: greeter-fr's identity, for later
+    after: environment
+    kubectl:
+      get:
+        - kind: Deployment
+          name: greeter-fr
+          namespace: default
+          json:
+            - { path: .metadata.uid, capture: GREETER_FR_UID }
+
+  - name: the greeters keep running, the same Deployment, as reviewed
+    after: environment
+    stays: 20s                                  # not just once: for 20s
+    kubectl:
+      get:
+        - kind: Deployment
+          name: greeter-fr
+          namespace: default
+          json:
+            - { path: .metadata.uid, equals: "${{ env.GREETER_FR_UID }}" }
+            - { path: .status.readyReplicas, expr: "${ value >= 1 }" }
+        - kind: Deployment
+          name: greeter-fr
+          namespace: default
+          snapshot: ./snapshots/greeter-fr.yaml  # written on the first run
+
+  - name: hello-web came after the greeters, and settled
+    after: environment
+    timeout: 90s
+    order:
+      - { kind: Deployment, name: greeter-fr, namespace: default, at: .metadata.creationTimestamp }
+      - { kind: Deployment, name: hello-web, namespace: default, at: .metadata.creationTimestamp }
+    kubectl:
+      get:
+        - { kind: Deployment, name: hello-web, namespace: default, settles: 10s }
+
+guards:
+  - name: no Warning events
+    events: { namespaces: [default] }
+  - name: no container restarts
+    restarts: { namespaces: [default] }
+
+onFailure:
+  kubectl:
+    describe:
+      - { kind: Deployment, name: hello-web, namespace: default }

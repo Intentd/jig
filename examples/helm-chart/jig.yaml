@@ -1,0 +1,79 @@
+# A chart and its upgrade: install, check, upgrade with new values, check
+# again. The workload reads its ConfigMap once, at start, so the upgrade step
+# restarts it: helm upgrade alone would leave the old greeting running.
+name: helm-chart
+description: Install the greeter chart, upgrade its greeting, and check both
+
+environment:
+  cluster:
+    name: jig-helm-chart
+
+prepare:
+  - name: install
+    helm:
+      chart: ./chart
+      release: greeter
+      namespace: greeter
+      createNamespace: true
+      values: 
+        greeting: hello
+      wait:
+        - kind: Deployment
+          name: greeter
+          namespace: greeter
+          ready: true
+          timeout: 120s
+
+  - name: upgrade
+    helm:
+      chart: ./chart
+      release: greeter
+      namespace: greeter
+      values: 
+        greeting: bonjour
+    restart:
+      - kind: Deployment
+        name: greeter
+        namespace: greeter
+
+expect:
+  - name: the chart serves its greeting
+    after: install
+    timeout: 60s
+    kubectl:
+      port-forward:
+        - service: greeter
+          namespace: greeter
+          port: 8080
+          path: /
+          contains: hello
+
+  - name: the upgrade changed the ConfigMap
+    after: upgrade
+    timeout: 30s
+    kubectl:
+      get:
+        - kind: ConfigMap
+          name: greeter
+          namespace: greeter
+          field: .data.greeting
+          assert:
+            equals: bonjour
+
+  - name: the restarted workload serves the new greeting
+    after: upgrade
+    timeout: 60s
+    kubectl:
+      port-forward:
+        - service: greeter
+          namespace: greeter
+          port: 8080
+          path: /
+          contains: bonjour
+
+onFailure:
+  kubectl:
+    logs:
+      - labelSelector: app=greeter
+        namespace: greeter
+        since: 5m

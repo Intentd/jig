@@ -1,0 +1,4 @@
+apiVersion: v2
+name: greeter
+description: Serves a greeting read from a ConfigMap
+version: 0.1.0

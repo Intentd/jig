@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: greeter
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: greeter }
+  template:
+    metadata:
+      labels: { app: greeter }
+    spec:
+      containers:
+        - name: greeter
+          image: busybox:1.37
+          # The greeting is read once, at start: a new value needs a restart.
+          env:
+            - name: GREETING
+              valueFrom:
+                configMapKeyRef: { name: greeter, key: greeting }
+          command: ["sh", "-c", 'mkdir -p /www && echo "$GREETING" > /www/index.html && exec httpd -f -p 8080 -h /www']
+          ports:
+            - containerPort: 8080

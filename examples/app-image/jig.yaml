@@ -1,0 +1,38 @@
+# CI for an application image: build it, run it in a cluster, prove it
+# serves. A pipeline pushes and signs the image only when this passes; in CI,
+# `jig run --images hello-web:dev` names the image the pipeline just built.
+name: app-image
+description: Build the hello-web image, deploy it, and check it serves its page
+
+environment:
+  cluster:
+    name: jig-app-image
+  images:
+    - image: hello-web:dev
+      build: { context: . }
+      deploy: { ports: [8080] }     # a Deployment and a Service named hello-web
+
+expect:
+  - name: the Deployment is ready
+    after: environment
+    timeout: 120s
+    resources:
+      - { kind: Deployment, name: hello-web, namespace: default, ready: true }
+
+  - name: the page is served
+    after: environment
+    timeout: 60s
+    kubectl:
+      port-forward:
+        - service: hello-web
+          namespace: default
+          port: 8080
+          path: /
+          contains: hello from jig
+
+onFailure:
+  kubectl:
+    describe:
+      - { kind: Deployment, name: hello-web, namespace: default }
+    logs:
+      - { name: hello-web, namespace: default, since: 5m }

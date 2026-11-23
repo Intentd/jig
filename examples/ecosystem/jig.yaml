@@ -1,0 +1,59 @@
+# The data services a workload uses, declared: jig installs the operators,
+# the instances and a Secret with their connection details, before
+# anything that reads them is deployed.
+name: ecosystem
+description: Postgres and Redis from their operators, reached through the Secret jig writes
+
+environment:
+  cluster:
+    name: jig-ecosystem
+  ecosystem:
+    postgres: { user: shop, database: shop }
+    redis: {}
+    secrets:
+      export: { name: shop-deps, namespace: default }    # POSTGRES_URL, REDIS_URL, …
+
+prepare:
+  - name: probe
+    apply: ./probe.yaml
+
+expect:
+  - name: the details are known before anything runs
+    after: environment
+    commands:
+      - run: echo ${{ ecosystem.postgres.host }} ${{ ecosystem.redis.host }}
+        equals: postgres-rw.data redis.data
+
+  - name: the Postgres cluster is up
+    after: environment
+    timeout: 120s
+    kubectl:
+      get:
+        - kind: clusters.postgresql.cnpg.io
+          name: postgres
+          namespace: data
+          match:
+            spec:
+              instances: 1
+            status:
+              readyInstances: '${ value >= 1 }'
+
+  - name: the probe reached both with the exported Secret
+    after: probe
+    timeout: 300s
+    kubectl:
+      get:
+        - kind: Job
+          name: probe
+          namespace: default
+          match:
+            status:
+              succeeded: 1
+
+onFailure:
+  kubectl:
+    describe:
+      - { kind: Job, name: probe, namespace: default }
+    logs:
+      - { labelSelector: job-name=probe, namespace: default, container: postgres, since: 5m }
+      - { labelSelector: job-name=probe, namespace: default, container: redis, since: 5m }

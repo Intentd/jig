@@ -1,0 +1,205 @@
+name: Build and Publish
+
+on:
+  workflow_call:
+    secrets:
+      HOMEBREW_TAP_TOKEN:
+        description: 'Token with permission to push to intentd/homebrew-tap'
+        required: true
+
+jobs:
+  build:
+    name: Build ${{ matrix.goos }}_${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - { goos: linux, goarch: amd64 }
+          - { goos: linux, goarch: arm64 }
+          - { goos: darwin, goarch: amd64 }
+          - { goos: darwin, goarch: arm64 }
+          - { goos: windows, goarch: amd64 }
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build and package
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+          TAG: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          bin=jig
+          [ "$GOOS" = windows ] && bin=jig.exe
+
+          mkdir -p dist
+
+          go build -trimpath -ldflags="-s -w \
+            -X github.com/intentd/tools/version.Version=${TAG} \
+            -X github.com/intentd/tools/version.Commit=${SHA} \
+            -X github.com/intentd/tools/version.Date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -o "dist/$bin" ./cmd/jig
+
+          tar -czf "dist/jig_${GOOS}_${GOARCH}.tar.gz" \
+            -C dist "$bin" \
+            -C "$GITHUB_WORKSPACE" README.md LICENSE
+
+          if [ "$GOOS" = windows ]; then
+            (cd dist && zip -j "jig_${GOOS}_${GOARCH}.zip" "$bin")
+          fi
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: jig_${{ matrix.goos }}_${{ matrix.goarch }}
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+          retention-days: 1
+          if-no-files-found: error
+
+  release:
+    name: Sign and release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Checksums and signature
+        working-directory: dist
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REF: ${{ github.ref }}
+        run: |
+          sha256sum jig_*.tar.gz jig_*.zip > checksums.txt
+
+          cosign sign-blob --yes \
+            --bundle checksums.txt.sigstore.json \
+            checksums.txt
+
+          cosign verify-blob checksums.txt \
+            --bundle checksums.txt.sigstore.json \
+            --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@${GITHUB_REF}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com
+
+          sha256sum -c checksums.txt
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+          files: |
+            dist/jig_*.tar.gz
+            dist/jig_*.zip
+            dist/checksums.txt
+            dist/checksums.txt.sigstore.json
+
+      - name: Upload checksums artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: checksums
+          path: dist/checksums.txt
+          retention-days: 1
+
+  homebrew:
+    name: Homebrew formula
+    needs: release
+    if: ${{ !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Homebrew tap
+        uses: actions/checkout@v6
+        with:
+          repository: intentd/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Download checksums
+        uses: actions/download-artifact@v8
+        with:
+          name: checksums
+
+      - name: Write Formula/jig.rb
+        env:
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          sha() {
+            grep " jig_$1.tar.gz$" checksums.txt | cut -d' ' -f1
+          }
+
+          VERSION="${TAG#v}"
+          BASE="https://github.com/${REPO}/releases/download/${TAG}"
+
+          cat > homebrew-tap/Formula/jig.rb <<EOF
+          class Jig < Formula
+            desc "Declarative Kubernetes tests that own their environment"
+            homepage "https://github.com/${REPO}"
+            version "${VERSION}"
+            license "Apache-2.0"
+
+            on_macos do
+              on_arm do
+                url "${BASE}/jig_darwin_arm64.tar.gz"
+                sha256 "$(sha darwin_arm64)"
+              end
+              on_intel do
+                url "${BASE}/jig_darwin_amd64.tar.gz"
+                sha256 "$(sha darwin_amd64)"
+              end
+            end
+
+            on_linux do
+              on_arm do
+                url "${BASE}/jig_linux_arm64.tar.gz"
+                sha256 "$(sha linux_arm64)"
+              end
+              on_intel do
+                url "${BASE}/jig_linux_amd64.tar.gz"
+                sha256 "$(sha linux_amd64)"
+              end
+            end
+
+            def install
+              bin.install "jig"
+            end
+
+            test do
+              system "#{bin}/jig", "version"
+            end
+          end
+          EOF
+
+      - name: Commit and push
+        working-directory: homebrew-tap
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add Formula/jig.rb
+          git commit -m "jig ${TAG}"
+          git push

@@ -1,0 +1,31 @@
+
+# A deliberately invalid Jig declaration
+name: commands
+description: Generate a file, check what it says, and clean up
+
+env:
+  GREETING: hello
+  NAME: jig
+  OUT: /tmp/jig-example-commands.txt
+
+environment:
+  cluster:
+    provider: none
+
+prepare:
+  - name: generate
+    retries: 3  # Invalid: unknown field
+    commands:
+      - run: echo "${{ env.GREETING }}, $NAME" > "${OUT}"
+
+expect:
+  - name: the file says hello
+    after: generate
+    timeout: 5  # Invalid: expected duration string
+    commands:
+      - run: cat "$OUT"
+        contains: hello, jig
+
+finally:
+  commands:
+    - run: rm -f "$OUT"

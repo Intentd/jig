@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 96" role="img" aria-label="jig, a declarative Kubernetes test harness">
+  <style>
+    .work { fill: none; stroke: #326CE5; stroke-width: 3; stroke-linejoin: round; }
+    .jaw { fill: #326CE5; }
+    .screw { fill: none; stroke: #326CE5; stroke-width: 3; stroke-linecap: round; }
+    .wordmark { fill: #14213D; }
+    .subtitle { fill: #5B6475; }
+    @media (prefers-color-scheme: dark) {
+      .work, .screw { stroke: #6E9BF5; }
+      .jaw { fill: #6E9BF5; }
+      .wordmark { fill: #F0F3F6; }
+      .subtitle { fill: #A3ACBA; }
+    }
+  </style>
+
+  <!-- Mark: a vise (two jaws on a base, tightened by a screw) holding a
+       Kubernetes object (heptagon) steady -->
+  <g transform="translate(16 22)">
+    <rect class="jaw" x="12" y="42" width="56" height="5" rx="1.5"/>
+    <rect class="jaw" x="16" y="10" width="12" height="34" rx="2"/>
+    <polygon class="work" transform="translate(40.5 27)" points="0.00,-12.00 9.38,-7.48 11.70,2.67 5.21,10.81 -5.21,10.81 -11.70,2.67 -9.38,-7.48"/>
+    <rect class="jaw" x="53" y="10" width="12" height="34" rx="2"/>
+    <path class="screw" d="M65 27 H84"/>
+    <path class="screw" d="M84 17 V37"/>
+  </g>
+
+  <!-- Wordmark -->
+  <text class="wordmark" x="128" y="56"
+        font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+        font-size="44" font-weight="700" letter-spacing="2">jig</text>
+  <text class="subtitle" x="130" y="76"
+        font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+        font-size="10.5" font-weight="600" letter-spacing="1.2">DECLARATIVE KUBERNETES TEST HARNESS</text>
+</svg>

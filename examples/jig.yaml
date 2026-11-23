@@ -1,0 +1,16 @@
+# One cluster for several tests: this test only imports, so it lends its
+# cluster to the imports that share one.
+name: suite
+description: The examples, run as one suite
+
+environment:
+  cluster:
+    name: jig-suite
+
+imports:
+  - ./commands/jig.yaml
+  - ./manifests/jig.yaml
+  - path: ./helm-chart/jig.yaml
+    wait: 5s
+  - path: ./app-image/jig.yaml
+    freshCluster: true             # builds and deploys an image: its own cluster

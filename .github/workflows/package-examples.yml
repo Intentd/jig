@@ -1,0 +1,72 @@
+name: Package Examples
+
+on:
+  workflow_call:
+    inputs:
+      github_repo:
+        description: 'GitHub repository (owner/name) for the main repo'
+        required: false
+        type: string
+        default: ${{ github.repository }}
+      project_name:
+        description: 'Human-readable project name (used in summary)'
+        required: false
+        type: string
+        default: 'Jig'
+
+jobs:
+  examples:
+    name: Package Examples
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Package example packs
+        run: |
+          mkdir -p dist
+
+          TAG="${{ github.ref_name }}"
+
+          for pack in commands app-image helm-chart manifests stack ecosystem library; do
+            tar -czf "dist/examples_${pack}_${TAG}.tar.gz" -C "examples/${pack}" .
+          done
+
+          # The suite contains all examples.
+          tar -czf "dist/examples_suite_${TAG}.tar.gz" -C examples .
+
+          echo "📦 Example packs packaged"
+
+      - name: Upload example packs
+        uses: actions/upload-artifact@v7
+        with:
+          name: examples
+          path: dist/examples_*.tar.gz
+          retention-days: 1
+
+      - name: Write examples summary
+        run: |
+          TAG="${{ github.ref_name }}"
+          REPO="${{ inputs.github_repo }}"
+          NAME="${{ inputs.project_name }}"
+
+          echo "## 📦 ${NAME} Example Packs" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Pack | Description | Archive |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|------|-------------|---------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Commands | Run commands and verify their results, without a cluster. | \`examples_commands_${TAG}.tar.gz\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| App Image | Build an application image and prove it serves before pushing. | \`examples_app-image_${TAG}.tar.gz\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Helm Chart | Install a Helm chart, upgrade it, and verify the result. | \`examples_helm-chart_${TAG}.tar.gz\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Manifests | Run a migration Job, verify it, and clean it up. | \`examples_manifests_${TAG}.tar.gz\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Stack | Run multiple dependent services together on Kubernetes. | \`examples_stack_${TAG}.tar.gz\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Ecosystem | Run an application with operator-managed data services. | \`examples_ecosystem_${TAG}.tar.gz\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Library | Use Jig from Go: load, validate, plan, run, and report. | \`examples_library_${TAG}.tar.gz\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Suite | Run the examples together as one suite. | \`examples_suite_${TAG}.tar.gz\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Download an example pack:**" >> "$GITHUB_STEP_SUMMARY"
+          echo '```bash' >> "$GITHUB_STEP_SUMMARY"
+          echo "curl -LO https://github.com/${REPO}/releases/download/${TAG}/examples_app-image_${TAG}.tar.gz" >> "$GITHUB_STEP_SUMMARY"
+          echo "mkdir -p my-project" >> "$GITHUB_STEP_SUMMARY"
+          echo "tar -xzf examples_app-image_${TAG}.tar.gz -C my-project" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"

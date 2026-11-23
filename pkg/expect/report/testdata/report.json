@@ -1,0 +1,101 @@
+{
+  "name": "shop",
+  "specPath": "e2e/jig.yaml",
+  "context": "kind-shop",
+  "cluster": "shop (kind)",
+  "startedAt": "2026-11-23T10:00:00Z",
+  "command": "jig run e2e --report",
+  "stop": {
+    "reason": "step",
+    "after": 1,
+    "ran": 3,
+    "planned": 4
+  },
+  "result": {
+    "total": 5,
+    "passed": 3,
+    "failed": 1,
+    "skipped": 1
+  },
+  "elapsed": "6s",
+  "warnings": [
+    "onFailure: kubectl logs: no pods match app=shop"
+  ],
+  "cases": [
+    {
+      "name": "the API is up",
+      "passed": true,
+      "elapsed": "1.5s",
+      "attempts": 2,
+      "retries": 3
+    },
+    {
+      "name": "the order is accepted",
+      "passed": false,
+      "elapsed": "1s",
+      "error": "exit code 1, want 0\ncurl: (7) refused",
+      "attempts": 1
+    },
+    {
+      "name": "only on prod",
+      "passed": false,
+      "skipped": true,
+      "elapsed": "0s"
+    }
+  ],
+  "imports": [
+    {
+      "path": "./upgrade/jig.yaml",
+      "result": {
+        "name": "upgrade",
+        "specPath": "./upgrade/jig.yaml",
+        "result": {
+          "total": 1,
+          "passed": 1,
+          "failed": 0,
+          "skipped": 0
+        },
+        "elapsed": "2s",
+        "cases": [
+          {
+            "name": "upgraded",
+            "passed": true,
+            "elapsed": "2s",
+            "attempts": 1
+          }
+        ]
+      }
+    },
+    {
+      "path": "./db/jig.yaml",
+      "result": {
+        "name": "db",
+        "specPath": "./db/jig.yaml",
+        "setup": {
+          "at": "migrate",
+          "error": "migrate: apply ./job.yaml: exit status 1\nerror: no objects passed to apply"
+        },
+        "result": {
+          "total": 1,
+          "passed": 1,
+          "failed": 0,
+          "skipped": 0
+        },
+        "elapsed": "1s",
+        "cases": [
+          {
+            "name": "postgres is up",
+            "passed": true,
+            "elapsed": "1s",
+            "attempts": 1
+          }
+        ]
+      },
+      "error": "migrate: apply ./job.yaml: exit status 1"
+    },
+    {
+      "path": "./broken/jig.yaml",
+      "error": "loading import ./broken/jig.yaml: no such file"
+    }
+  ]
+}

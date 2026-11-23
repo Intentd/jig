@@ -1,0 +1,51 @@
+# Raw manifests and their lifecycle: a database migration Job that must run
+# to completion and say so, and that must be gone after it is deleted.
+name: manifests
+description: Run the migrate Job, check it completed and what it logged, then delete it
+
+environment:
+  cluster:
+    name: jig-manifests
+  apply:
+    - ./namespace.yaml               # furniture: not the thing under test
+
+prepare:
+  - name: migrate
+    apply: ./migrate-job.yaml
+  - name: removed
+    delete: ./migrate-job.yaml
+
+expect:
+  - name: the Job completed
+    after: migrate
+    timeout: 120s
+    kubectl:
+      get:
+        - kind: Job
+          name: migrate
+          namespace: shop
+          field: .status.succeeded
+          assert:
+            equals: "1"
+
+  - name: the Job reported its migrations
+    after: migrate
+    timeout: 30s
+    kubectl:
+      logs:
+        - labelSelector: app=migrate
+          namespace: shop
+          contains: migrations done
+
+  - name: the Job is gone
+    after: removed
+    timeout: 60s
+    resources:
+      - { kind: Job, name: migrate, namespace: shop, count: 0 }
+
+onFailure:
+  kubectl:
+    describe:
+      - { kind: Job, name: migrate, namespace: shop }
+    logs:
+      - { labelSelector: app=migrate, namespace: shop }
